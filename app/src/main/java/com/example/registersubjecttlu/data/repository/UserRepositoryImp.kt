@@ -5,6 +5,7 @@ import com.example.registersubjecttlu.data.remote.UserApiService
 import com.example.registersubjecttlu.domain.model.LoginRequest
 import com.example.registersubjecttlu.domain.model.UserResponse
 import com.example.registersubjecttlu.domain.repository.UserRepository
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 class UserRepositoryImp @Inject constructor(

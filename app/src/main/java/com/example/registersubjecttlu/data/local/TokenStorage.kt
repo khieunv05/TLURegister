@@ -20,6 +20,7 @@ class TokenStorage @Inject constructor(
     companion object{
         private val TOKEN_KEY = stringPreferencesKey("access_token")
         private val STUDENT_ID_KEY = intPreferencesKey("student_id")
+        private val SEMESTER_ID_KEY = intPreferencesKey("semester_id")
     }
     val tokenFlow : Flow<String?> = context.dataStore.data
         .map {
@@ -28,6 +29,9 @@ class TokenStorage @Inject constructor(
         }
     val studentIdFlow : Flow<Int?> = context.dataStore.data.map {
         preferences -> preferences[STUDENT_ID_KEY]
+    }
+    val semesterIdFlow: Flow<Int?> = context.dataStore.data.map {
+        preferences -> preferences[SEMESTER_ID_KEY]
     }
     suspend fun saveToken(token: String){
         context.dataStore.edit {
@@ -39,11 +43,17 @@ class TokenStorage @Inject constructor(
             preferences -> preferences[STUDENT_ID_KEY] = studentId
         }
     }
+    suspend fun saveSemesterId(semesterId: Int){
+        context.dataStore.edit {
+            preferences -> preferences[SEMESTER_ID_KEY] = semesterId
+        }
+    }
     suspend fun clearToken(){
         context.dataStore.edit {
             preferences ->
             preferences.remove(TOKEN_KEY)
             preferences.remove(STUDENT_ID_KEY)
+            preferences.remove(SEMESTER_ID_KEY)
         }
     }
 }

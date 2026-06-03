@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.registersubjecttlu.data.local.TokenStorage
 import com.example.registersubjecttlu.data.local.entity.SemesterEntity
+import com.example.registersubjecttlu.domain.model.RegisterPeriodRequest
 import com.example.registersubjecttlu.domain.repository.CourseRepository
 import com.example.registersubjecttlu.domain.repository.SemesterRepository
 import com.example.registersubjecttlu.domain.repository.StudentRepository
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import retrofit2.HttpException
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,6 +41,11 @@ class MainScreenViewModel @Inject constructor(
                         studentId = tokenStorage.studentIdFlow.first()
                     }
                     catch (e: Exception){
+                        if(e is HttpException && e.code() == 401){
+                            _uiState.value = MainScreenUIState.NavigateToLoginScreen
+                            tokenStorage.clearToken()
+                            return@launch
+                        }
                         _uiState.value = MainScreenUIState.Error("Lỗi khi lấy dữ liệu sinh viên")
                         return@launch
                     }
@@ -50,10 +57,16 @@ class MainScreenViewModel @Inject constructor(
                 }
                 catch (e: Exception){
                     e.printStackTrace()
+                    if(e is HttpException && e.code() == 401){
+                        _uiState.value = MainScreenUIState.NavigateToLoginScreen
+                        tokenStorage.clearToken()
+                        return@launch
+                    }
                 }
                 try {
                     semesterRepository.getSemesterFromLocal().collectLatest {
                             localSemesters-> val semesterId = findActiveSemesterId(localSemesters) ?: 0
+                            tokenStorage.saveSemesterId(semesterId)
                             println("SemesterId: $semesterId")
                         if(semesterId != 0){
                             try{
@@ -61,10 +74,16 @@ class MainScreenViewModel @Inject constructor(
                                 _uiState.value = MainScreenUIState.Success(courseResponse)
                             }
                             catch (e: Exception){
+                                if(e is HttpException && e.code() == 401){
+                                    _uiState.value = MainScreenUIState.NavigateToLoginScreen
+                                    tokenStorage.clearToken()
+                                    return@collectLatest
+                                }
                                 _uiState.value = MainScreenUIState.Error("Không thể tải danh sách môn học")
                             }
                         }
                         else{
+
                             _uiState.value = MainScreenUIState.Error("Hiện tại trường không mở đợt đăng kí nào")
                         }
                     }
@@ -90,5 +109,19 @@ class MainScreenViewModel @Inject constructor(
             }
         }
         return semesters.find { it.isCurrent }?.semesterRegisterPeriods?.firstOrNull()?.id
+    }
+    fun registerSubject(registerPeriodRequest: RegisterPeriodRequest){
+        viewModelScope.launch {
+            try{
+                _uiState.value = MainScreenUIState.Loading
+                val studentId = tokenStorage.studentIdFlow.first() ?: 0
+                val semesterId = tokenStorage.semesterIdFlow.first() ?:0
+                val registerCourseResponse = courseRepository.registerCourse(studentId,semesterId,registerPeriodRequest)
+                _uiState.value = MainScreenUIState.RegisterSuccess(registerCourseResponse)
+            }
+            catch (e: Exception){
+                _uiState.value = MainScreenUIState.RegisterError("Đăng ký thất bại")
+            }
+        }
     }
 }

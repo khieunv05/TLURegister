@@ -35,7 +35,11 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("main") {
                         val mainViewModel: MainScreenViewModel = hiltViewModel()
-                        MainScreen(viewModel = mainViewModel)
+                        MainScreen(viewModel = mainViewModel,{
+                            navController.navigate("login") {
+                                popUpTo("main") { inclusive = true }
+                            }
+                        })
                     }
                 }
             }

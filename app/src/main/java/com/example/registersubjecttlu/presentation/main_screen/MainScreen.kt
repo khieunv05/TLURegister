@@ -17,73 +17,87 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.registersubjecttlu.domain.model.CourseResponse
 import com.example.registersubjecttlu.domain.model.CourseSubject
+import com.example.registersubjecttlu.domain.model.RegisterPeriodRequest
 import com.example.registersubjecttlu.domain.model.SubCourseSubject
 import com.example.registersubjecttlu.domain.model.TimeTable
 import com.example.registersubjecttlu.ui.theme.RegisterSubJectTLUTheme
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainScreenViewModel){
+fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var lastSuccessData by remember { mutableStateOf<CourseResponse?>(null) }
+
+    LaunchedEffect(uiState) {
+        when(uiState) {
+            is MainScreenUIState.Success -> {
+                lastSuccessData = (uiState as MainScreenUIState.Success).courseResponse
+            }
+            is MainScreenUIState.RegisterSuccess -> {
+                snackbarHostState.showSnackbar((uiState as MainScreenUIState.RegisterSuccess).registerCourseResponse.message)
+                viewModel.loadMainScreenData()
+            }
+            is MainScreenUIState.RegisterError -> {
+                snackbarHostState.showSnackbar((uiState as MainScreenUIState.RegisterError).message)
+                viewModel.loadMainScreenData()
+            }
+            is MainScreenUIState.NavigateToLoginScreen -> {
+                callback()
+            }
+            else -> {}
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = { TopAppBar(title = { Text("Đăng ký học") },
             actions = {
-                IconButton(onClick = {
-                    viewModel.loadMainScreenData()
-                }) { 
-                    Icon(
-                        imageVector = Icons.Default.Refresh, 
-                        contentDescription = "Refresh"
-                    ) 
+                IconButton(onClick = { viewModel.loadMainScreenData() }) { 
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh") 
                 }
             })}
-    ) {
-        paddingValues ->
+    ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)){
-            when(val state = uiState){
-                is MainScreenUIState.Success -> {
-                    val registrations = state.courseResponse.courseRegisterViewObject?.subjectRegistrations ?: emptyList()
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(registrations) { subject ->
-                            var isExpanded by rememberSaveable { mutableStateOf(false) }
-                            
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp)
-                                    .clickable {
-                                        isExpanded = !isExpanded
-                                    }
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = subject.subjectName ?: "Không tên", 
-                                        modifier = Modifier.padding(16.dp),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    
-                                    if(isExpanded){
-                                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
 
-                                            val courses = subject.courseSubjects ?: emptyList()
-                                            courses.forEach { course ->
-                                                if (course.subCourseSubjects.isNullOrEmpty()) {
-                                                    CourseItem(
-                                                        course = course,
-                                                        onRegisterClick = { /* logic đăng ký */ }
+            lastSuccessData?.let { response ->
+                val registrations = response.courseRegisterViewObject?.subjectRegistrations ?: emptyList()
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(registrations) { subject ->
+                        var isExpanded by rememberSaveable { mutableStateOf(false) }
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                                .clickable { isExpanded = !isExpanded }
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = subject.subjectName ?: "Không tên", 
+                                    modifier = Modifier.padding(16.dp),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if(isExpanded){
+                                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        subject.courseSubjects?.forEach { course ->
+                                            if (course.subCourseSubjects.isNullOrEmpty()) {
+                                                CourseItem(course = course, onRegisterClick = {
+                                                    viewModel.registerSubject(
+                                                        RegisterPeriodRequest(course.id, course.subjectId)
                                                     )
-                                                } else {
-                                                    TheoryWithSubCoursesItem(
-                                                        theoryCourse = course,
-                                                        onSubRegisterClick = { subCourse ->
-                                                            /* logic đăng ký lớp thực hành */
-                                                        }
+                                                })
+                                            } else {
+                                                TheoryWithSubCoursesItem(theoryCourse = course, onSubRegisterClick = { sub ->
+                                                    viewModel.registerSubject(
+                                                        RegisterPeriodRequest(sub.id, sub.subjectId)
                                                     )
-                                                }
-                                                Spacer(modifier = Modifier.height(12.dp))
+                                                })
                                             }
+                                            Spacer(modifier = Modifier.height(12.dp))
                                         }
                                     }
                                 }
@@ -91,14 +105,26 @@ fun MainScreen(viewModel: MainScreenViewModel){
                         }
                     }
                 }
-                is MainScreenUIState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                is MainScreenUIState.Error -> {
-                    Text(text = state.message, modifier = Modifier.align(Alignment.Center))
-                }
             }
 
+            when(uiState) {
+                is MainScreenUIState.Loading -> {
+                    if (lastSuccessData == null) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
+                    }
+                }
+                is MainScreenUIState.Error -> {
+                    if (lastSuccessData == null) {
+                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = (uiState as MainScreenUIState.Error).message)
+                            Button(onClick = { viewModel.loadMainScreenData() }) { Text("Thử lại") }
+                        }
+                    }
+                }
+                else -> {}
+            }
         }
     }
 }
@@ -457,75 +483,6 @@ fun PreviewCourseScreen() {
             items(mockCourses) { course ->
                 CourseItem(course = course, onRegisterClick = {})
             }
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewTheoryWithSubCourseItem() {
-    val mockTheoryTimeTables = listOf(
-        TimeTable(
-            weekIndex = 2,
-            fromWeek = 1,
-            toWeek = 10,
-            start = "1",
-            end = "3",
-            teacherName = "Nguyễn Văn A",
-            roomName = "P.401-A2"
-        )
-    )
-    val mockSubCourses = listOf(
-        SubCourseSubject(
-            id = 10,
-            subjectId = 101,
-            timetables = listOf(
-                TimeTable(
-                    weekIndex = 3, fromWeek = 1, toWeek = 10, start = "1", end = "3",
-                    teacherName = "Trợ giảng A", roomName = "Lab 1"
-                )
-            ),
-            maxStudent = 20,
-            numberStudent = 5,
-            isSelected = true,
-            displayName = "Thực hành - Nhóm 1.1 (Đã chọn)",
-            overLapClasses = emptyList()
-        ),
-        SubCourseSubject(
-            id = 11,
-            subjectId = 101,
-            timetables = listOf(
-                TimeTable(
-                    weekIndex = 5, fromWeek = 1, toWeek = 10, start = "7", end = "9",
-                    teacherName = "Trợ giảng B", roomName = "Lab 2"
-                )
-            ),
-            maxStudent = 20,
-            numberStudent = 15,
-            isSelected = false,
-            displayName = "Thực hành - Nhóm 1.2",
-            overLapClasses = listOf("Trùng lịch")
-        )
-    )
-
-    val mockTheoryCourse = CourseSubject(
-        id = 1,
-        subjectId = 101,
-        timetables = mockTheoryTimeTables,
-        maxStudent = 40,
-        numberStudent = 20,
-        displayName = "Lập trình Web - Nhóm 1",
-        isSelected = false,
-        overLapClasses = emptyList(),
-        subCourseSubjects = mockSubCourses
-    )
-
-    RegisterSubJectTLUTheme {
-        Box(modifier = Modifier.padding(16.dp)) {
-            TheoryWithSubCoursesItem(
-                theoryCourse = mockTheoryCourse,
-                onSubRegisterClick = {}
-            )
         }
     }
 }
