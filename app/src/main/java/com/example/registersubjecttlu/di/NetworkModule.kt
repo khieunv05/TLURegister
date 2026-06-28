@@ -38,7 +38,6 @@ object NetworkModule {
                 val myToken = runBlocking {
                     tokenStorage.tokenFlow.first()
                 }
-                println("Token trong máy là: $myToken")
                 val newRequest = if(!myToken.isNullOrEmpty()){
                     originalRequest.newBuilder()
                         .header("Authorization", "Bearer $myToken")

@@ -15,23 +15,76 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.registersubjecttlu.domain.model.CourseResponse
-import com.example.registersubjecttlu.domain.model.CourseSubject
-import com.example.registersubjecttlu.domain.model.RegisterPeriodRequest
-import com.example.registersubjecttlu.domain.model.SubCourseSubject
-import com.example.registersubjecttlu.domain.model.TimeTable
-import com.example.registersubjecttlu.ui.theme.RegisterSubJectTLUTheme
-import kotlinx.coroutines.launch
+import com.example.registersubjecttlu.domain.model.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
-    val uiState by viewModel.uiState.collectAsState()
+fun MainContainerScreen(viewModel : MainScreenViewModel,callback: () -> Unit,
+                        profileCallback:()-> Unit){
+    var selectedTab by remember { mutableStateOf(ScreenTab.HOME) }
     val snackbarHostState = remember { SnackbarHostState() }
-    var lastSuccessData by remember { mutableStateOf<CourseResponse?>(null) }
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        topBar = { TopAppBar(title = { Text("Xin chào ${viewModel.displayName ?: "" }") },
+            actions = {
+                IconButton(onClick = { viewModel.loadMainScreenData() }) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
+                }
+            })},
+        bottomBar = {
+            NavigationBar() {
+                ScreenTab.entries.forEach {tab->
+                    NavigationBarItem(
+                        selected = selectedTab == tab,
+                        onClick = {selectedTab = tab},
+                        icon = {Icon(tab.icon, contentDescription = selectedTab.title)}
 
+                    )
+                }
+            }
+        }
+    ) {
+        paddingValues ->
+        Box(
+            modifier = Modifier.fillMaxSize().padding(paddingValues)
+        ){
+            when(selectedTab){
+                ScreenTab.HOME -> MainScreen(viewModel, snackbarHostState, callback)
+                else -> ProfileScreen({ viewModel.logout()
+                profileCallback()
+                })
+            }
+        }
+    }
+
+}
+@Composable
+fun ProfileScreen(callback: () -> Unit){
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ){
+        OutlinedButton(onClick = {
+            callback()
+        }) {
+            Text("Đăng xuất", style = MaterialTheme.typography.titleMedium)
+        }
+    }
+
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(viewModel: MainScreenViewModel, snackbarHostState: SnackbarHostState, callback:()-> Unit){
+    val uiState by viewModel.uiState.collectAsState()
+    var lastSuccessData by remember { mutableStateOf<CourseResponse?>(null) }
+    var semesterExpanded by remember { mutableStateOf<Boolean>( false) }
+    var secondExpanded by remember { mutableStateOf(false) }
+    val semesterOptions by viewModel.semesterOptions.collectAsState()
+    val selectedSecondOption by viewModel.selectedSecondOption.collectAsState()
+    val selectedSemesterOption by viewModel.selectedSemesterOption.collectAsState()
+    val secondOptions by viewModel.secondOptions.collectAsState()
+    val isLoading = semesterOptions.isEmpty()
     LaunchedEffect(uiState) {
         when(uiState) {
             is MainScreenUIState.Success -> {
@@ -39,11 +92,17 @@ fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
             }
             is MainScreenUIState.RegisterSuccess -> {
                 snackbarHostState.showSnackbar((uiState as MainScreenUIState.RegisterSuccess).registerCourseResponse.message)
-                viewModel.loadMainScreenData()
+                viewModel.loadingCourse()
             }
             is MainScreenUIState.RegisterError -> {
                 snackbarHostState.showSnackbar((uiState as MainScreenUIState.RegisterError).message)
-                viewModel.loadMainScreenData()
+            }
+            is MainScreenUIState.RemoveRegisterSuccess->{
+                snackbarHostState.showSnackbar((uiState as MainScreenUIState.RemoveRegisterSuccess).message)
+                viewModel.loadingCourse()
+            }
+            is MainScreenUIState.RemoveRegisterError->{
+                snackbarHostState.showSnackbar((uiState as MainScreenUIState.RemoveRegisterError).message)
             }
             is MainScreenUIState.NavigateToLoginScreen -> {
                 callback()
@@ -52,16 +111,78 @@ fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = { TopAppBar(title = { Text("Đăng ký học") },
-            actions = {
-                IconButton(onClick = { viewModel.loadMainScreenData() }) { 
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh") 
+    Box(modifier = Modifier.fillMaxSize()){
+
+        Column(modifier = Modifier.padding(16.dp)) {
+
+
+            Row() {
+                ExposedDropdownMenuBox(
+                    modifier = Modifier.weight(1f),
+                    expanded = semesterExpanded,
+                    onExpandedChange = { semesterExpanded = !semesterExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedSemesterOption?.semesterName ?: "Chọn học kỳ",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = semesterExpanded) },
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true).weight(1f),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = semesterExpanded,
+                        onDismissRequest = { semesterExpanded = false }
+                    ) {
+                        semesterOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(text = option.semesterName ?: "") },
+                                onClick = {
+                                    viewModel.onSemesterOptionChange(option)
+                                    semesterExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
-            })}
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)){
+
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                ExposedDropdownMenuBox(
+                    modifier = Modifier.weight(1f),
+                    expanded = secondExpanded,
+                    onExpandedChange = { secondExpanded = !secondExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedSecondOption?.name ?: "Chọn học kỳ",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = secondExpanded) },
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true).fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = secondExpanded,
+                        onDismissRequest = { secondExpanded = false }
+                    ) {
+                        secondOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(text = option.name ?: "") },
+                                onClick = {
+                                    viewModel.onSelectedSecondOptionChange(option)
+                                    viewModel.loadingCourse()
+                                    secondExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             lastSuccessData?.let { response ->
                 val registrations = response.courseRegisterViewObject?.subjectRegistrations ?: emptyList()
@@ -76,7 +197,7 @@ fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = subject.subjectName ?: "Không tên", 
+                                    text = subject.subjectName ?: "Không tên",
                                     modifier = Modifier.padding(16.dp),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
@@ -89,11 +210,19 @@ fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
                                                     viewModel.registerSubject(
                                                         RegisterPeriodRequest(course.id, course.subjectId)
                                                     )
+                                                }, onRemoveRegisterClick = {
+                                                    viewModel.removeRegister(
+                                                        RegisterPeriodRequest(course.id,course.subjectId)
+                                                    )
                                                 })
                                             } else {
                                                 TheoryWithSubCoursesItem(theoryCourse = course, onSubRegisterClick = { sub ->
                                                     viewModel.registerSubject(
                                                         RegisterPeriodRequest(sub.id, sub.subjectId)
+                                                    )
+                                                }, onSubRemoveRegisterClick = {sub->
+                                                    viewModel.removeRegister(
+                                                        RegisterPeriodRequest(sub.id,sub.subjectId)
                                                     )
                                                 })
                                             }
@@ -106,31 +235,35 @@ fun MainScreen(viewModel: MainScreenViewModel, callback:()-> Unit){
                     }
                 }
             }
+        }
 
-            when(uiState) {
-                is MainScreenUIState.Loading -> {
-                    if (lastSuccessData == null) {
-                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                    } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
-                    }
+        when(uiState) {
+            is MainScreenUIState.Loading -> {
+                if (lastSuccessData == null) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
                 }
-                is MainScreenUIState.Error -> {
-                    if (lastSuccessData == null) {
-                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = (uiState as MainScreenUIState.Error).message)
-                            Button(onClick = { viewModel.loadMainScreenData() }) { Text("Thử lại") }
-                        }
-                    }
-                }
-                else -> {}
             }
+            is MainScreenUIState.Error -> {
+                if (lastSuccessData == null) {
+                    Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = (uiState as MainScreenUIState.Error).message)
+                    }
+                }
+            }
+            is MainScreenUIState.LoadSemesterSuccess->{
+                Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = (uiState as MainScreenUIState.LoadSemesterSuccess).message)
+                }
+            }
+            else -> {}
         }
     }
 }
 
 @Composable
-fun CourseItem(course: CourseSubject, onRegisterClick: () -> Unit) {
+fun CourseItem(course: CourseSubject, onRegisterClick: () -> Unit,onRemoveRegisterClick:()-> Unit) {
     val overLap = course.overLapClasses ?: emptyList()
     val isConflict = overLap.isNotEmpty()
     val isRegistered = course.isSelected
@@ -174,7 +307,7 @@ fun CourseItem(course: CourseSubject, onRegisterClick: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Groups,
@@ -210,17 +343,18 @@ fun CourseItem(course: CourseSubject, onRegisterClick: () -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = onRegisterClick,
+                onClick = if(!isRegistered) onRegisterClick else onRemoveRegisterClick,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isRegistered && !isConflict && !isFull,
+                enabled = isRegistered ||(!isConflict && !isFull),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
-                )
+                ),
+                contentPadding = PaddingValues(8.dp)
             ) {
                 Text(
                     text = when {
-                        isRegistered -> "Đã trong danh sách học"
+                        isRegistered -> "Hủy đăng kí học"
                         isConflict -> "Lịch học bị trùng"
                         isFull -> "Lớp đã đầy"
                         else -> "Đăng ký ngay"
@@ -234,7 +368,8 @@ fun CourseItem(course: CourseSubject, onRegisterClick: () -> Unit) {
 @Composable
 fun TheoryWithSubCoursesItem(
     theoryCourse: CourseSubject,
-    onSubRegisterClick: (SubCourseSubject) -> Unit
+    onSubRegisterClick: (SubCourseSubject) -> Unit,
+    onSubRemoveRegisterClick:(SubCourseSubject)-> Unit
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -250,12 +385,12 @@ fun TheoryWithSubCoursesItem(
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary
             )
-            
+
             val tables = theoryCourse.timetables ?: emptyList()
             tables.forEach { TimeTableEntry(it) }
-            
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            
+
             Text(
                 text = "Chọn lớp thực hành:",
                 style = MaterialTheme.typography.labelLarge,
@@ -263,7 +398,7 @@ fun TheoryWithSubCoursesItem(
             )
 
             theoryCourse.subCourseSubjects?.forEach { sub ->
-                SubCourseItem(sub, onRegisterClick = { onSubRegisterClick(sub) })
+                SubCourseItem(sub, onRegisterClick = { onSubRegisterClick(sub) }, onRemoveRegisterClick = {onSubRemoveRegisterClick(sub)})
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -271,7 +406,7 @@ fun TheoryWithSubCoursesItem(
 }
 
 @Composable
-fun SubCourseItem(sub: SubCourseSubject, onRegisterClick: () -> Unit) {
+fun SubCourseItem(sub: SubCourseSubject, onRegisterClick: () -> Unit,onRemoveRegisterClick: () -> Unit) {
     val overLap = sub.overLapClasses ?: emptyList()
     val isConflict = overLap.isNotEmpty()
     val isFull = sub.numberStudent >= sub.maxStudent
@@ -294,7 +429,7 @@ fun SubCourseItem(sub: SubCourseSubject, onRegisterClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                
+
                 if (sub.isSelected) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
@@ -318,17 +453,17 @@ fun SubCourseItem(sub: SubCourseSubject, onRegisterClick: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isFull) MaterialTheme.colorScheme.error else Color.Unspecified
                 )
-                
+
                 Button(
-                    onClick = onRegisterClick,
+                    onClick = if(!sub.isSelected) onRegisterClick else onRemoveRegisterClick,
                     modifier = Modifier.height(36.dp),
-                    enabled = !sub.isSelected && !isConflict && !isFull,
+                    enabled = sub.isSelected || (!isConflict && !isFull),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(4.dp)
                 ) {
                     Text(
                         text = when {
-                            sub.isSelected -> "Đã chọn"
+                            sub.isSelected -> "Hủy đăng kí"
                             isConflict -> "Trùng"
                             isFull -> "Đầy"
                             else -> "Chọn lớp"
@@ -398,91 +533,5 @@ fun fromIntWeekIndexToWeekIndex(weekIndex: Int) : String{
         7 -> "Thứ bảy"
         8 -> "Chủ nhật"
         else -> "Lỗi"
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewCourseScreen() {
-    val mockTimeTables = listOf(
-        TimeTable(
-            weekIndex = 2,
-            fromWeek = 1,
-            toWeek = 10,
-            start = "1",
-            end = "3",
-            teacherName = "Nguyễn Văn A",
-            roomName = "P.401-A2"
-        ),
-        TimeTable(
-            weekIndex = 4,
-            fromWeek = 1,
-            toWeek = 10,
-            start = "7",
-            end = "9",
-            teacherName = "Trần Thị B",
-            roomName = "P.202-B1"
-        )
-    )
-
-    val mockSubCourses = listOf(
-        SubCourseSubject(
-            id = 10,
-            subjectId = 101,
-            timetables = listOf(mockTimeTables[0].copy(start = "4", end = "6", roomName = "Lab 1")),
-            maxStudent = 25,
-            numberStudent = 10,
-            isSelected = false,
-            displayName = "Thực hành Nhóm 1.1",
-            overLapClasses = emptyList()
-        ),
-        SubCourseSubject(
-            id = 11,
-            subjectId = 101,
-            timetables = listOf(mockTimeTables[1].copy(start = "10", end = "12", roomName = "Lab 2")),
-            maxStudent = 25,
-            numberStudent = 25,
-            isSelected = false,
-            displayName = "Thực hành Nhóm 1.2 (Đầy)",
-            overLapClasses = emptyList()
-        )
-    )
-
-    val mockCourses = listOf(
-        CourseSubject(
-            id = 1,
-            subjectId = 101,
-            timetables = mockTimeTables,
-            maxStudent = 50,
-            numberStudent = 30,
-            displayName = "Lập trình Android nâng cao - Có lớp thực hành",
-            isSelected = false,
-            overLapClasses = emptyList(),
-            subCourseSubjects = mockSubCourses
-        ),
-        CourseSubject(
-            id = 3,
-            subjectId = 102,
-            timetables = listOf(mockTimeTables[1]),
-            maxStudent = 60,
-            numberStudent = 10,
-            displayName = "Cấu trúc dữ liệu và giải thuật - Đã đăng ký",
-            isSelected = true,
-            overLapClasses = emptyList(),
-            subCourseSubjects = null
-        )
-    )
-
-    RegisterSubJectTLUTheme() {
-        // Mocking CourseScreen with static list
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(mockCourses) { course ->
-                CourseItem(course = course, onRegisterClick = {})
-            }
-        }
     }
 }

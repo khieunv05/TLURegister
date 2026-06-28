@@ -22,4 +22,12 @@ class CourseRepositoryImp @Inject constructor(
         return courseApiService.registerCourse(studentId,semesterId,registerPeriodRequest)
     }
 
+    override suspend fun removeRegister(
+        studentId: Int,
+        semesterId: Int,
+        registerPeriodRequest: RegisterPeriodRequest
+    ): RegisterCourseResponse {
+        return courseApiService.removeRegister(studentId, semesterId, registerPeriodRequest)
+    }
+
 }

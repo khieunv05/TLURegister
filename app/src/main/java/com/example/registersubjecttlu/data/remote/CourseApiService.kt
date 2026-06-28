@@ -4,7 +4,9 @@ import com.example.registersubjecttlu.domain.model.CourseResponse
 import com.example.registersubjecttlu.domain.model.RegisterCourseResponse
 import com.example.registersubjecttlu.domain.model.RegisterPeriodRequest
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -14,6 +16,12 @@ interface CourseApiService {
                             @Path("idSemester") semesterId: Int): CourseResponse
     @POST("api/cs_reg_mongo/add-register/{idStudent}/{idSemester}")
     suspend fun registerCourse(
+        @Path("idStudent") studentId: Int,
+        @Path("idSemester") semesterId: Int,
+        @Body registerPeriodRequest: RegisterPeriodRequest
+    ): RegisterCourseResponse
+    @HTTP(method = "DELETE", path = "api/cs_reg_mongo/remove-register/{idStudent}/{idSemester}",hasBody = true)
+    suspend fun removeRegister(
         @Path("idStudent") studentId: Int,
         @Path("idSemester") semesterId: Int,
         @Body registerPeriodRequest: RegisterPeriodRequest

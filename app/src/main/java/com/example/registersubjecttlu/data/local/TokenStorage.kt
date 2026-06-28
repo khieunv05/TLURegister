@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,7 @@ class TokenStorage @Inject constructor(
         private val TOKEN_KEY = stringPreferencesKey("access_token")
         private val STUDENT_ID_KEY = intPreferencesKey("student_id")
         private val SEMESTER_ID_KEY = intPreferencesKey("semester_id")
+        private val TIME_KEY = longPreferencesKey("time")
     }
     val tokenFlow : Flow<String?> = context.dataStore.data
         .map {
@@ -32,6 +34,9 @@ class TokenStorage @Inject constructor(
     }
     val semesterIdFlow: Flow<Int?> = context.dataStore.data.map {
         preferences -> preferences[SEMESTER_ID_KEY]
+    }
+    val timeFlow: Flow<Long?> = context.dataStore.data.map {
+        preferences -> preferences[TIME_KEY]
     }
     suspend fun saveToken(token: String){
         context.dataStore.edit {
@@ -48,12 +53,16 @@ class TokenStorage @Inject constructor(
             preferences -> preferences[SEMESTER_ID_KEY] = semesterId
         }
     }
+    suspend fun saveTime(time: Long){
+        context.dataStore.edit {
+            preferences -> preferences[TIME_KEY] = time
+        }
+    }
     suspend fun clearToken(){
         context.dataStore.edit {
             preferences ->
             preferences.remove(TOKEN_KEY)
             preferences.remove(STUDENT_ID_KEY)
-            preferences.remove(SEMESTER_ID_KEY)
         }
     }
 }

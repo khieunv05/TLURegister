@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.registersubjecttlu.presentation.login.LoginScreen
 import com.example.registersubjecttlu.presentation.login.LoginViewModel
+import com.example.registersubjecttlu.presentation.main_screen.MainContainerScreen
 import com.example.registersubjecttlu.presentation.main_screen.MainScreen
 import com.example.registersubjecttlu.presentation.main_screen.MainScreenViewModel
 import com.example.registersubjecttlu.ui.theme.RegisterSubJectTLUTheme
@@ -35,9 +36,13 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("main") {
                         val mainViewModel: MainScreenViewModel = hiltViewModel()
-                        MainScreen(viewModel = mainViewModel,{
+                        MainContainerScreen(viewModel = mainViewModel,{
                             navController.navigate("login") {
                                 popUpTo("main") { inclusive = true }
+                            }
+                        },{
+                            navController.navigate("login"){
+                                popUpTo("main"){inclusive = true}
                             }
                         })
                     }
